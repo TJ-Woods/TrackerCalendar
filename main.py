@@ -1,4 +1,5 @@
 import random
+import datetime as dt
 import sqlite3 as sql
 import pygame as pg; pg.init()
 
@@ -8,6 +9,7 @@ DIS = WIN.get_surface()
 
 clock = pg.time.Clock()
 TICK = 30
+FONT = pg.font.SysFont("", 12)
 
 TRACKER_DB = "./TrackerCalendar.db"
 
@@ -29,7 +31,6 @@ def sql_query(func):
             curs = conn.cursor()
             res = func(curs, *args, **kwargs)
             data = res.fetchall()
-        print(data)
         return data
 
     return wrapper
@@ -106,12 +107,13 @@ class Theme:
 
 
 class Dot:
-    def __init__(self, x, y, color, lvl):
+    def __init__(self, x, y, color, count, date: dt.date = "2000-1-1",):
         self.x = x
         self.y = y
         self.color = color
-        self.lvl = lvl
+        self.count = count
         self.rect = pg.Rect(self.x, self.y, DOT_SIZE, DOT_SIZE)
+        self.date = date
 
     def draw(self, parent_rect):
         parentx = parent_rect[0]
@@ -122,7 +124,12 @@ class Dot:
             DOT_SIZE,
             DOT_SIZE
         )
-        pg.draw.rect(DIS, self.color[self.lvl], rect, border_radius=DOT_BRAD)
+        lvl = self.count  # TODO: Normalise count between 0 and 4
+        pg.draw.rect(DIS, self.color[lvl], rect, border_radius=DOT_BRAD)
+
+    def draw_info(self, tracker):
+        txt = str(self.date) + " " + str(sql_get_day_count(tracker, self.date)[0][0])
+        DIS.blit(FONT.render(txt, False, Theme.fg, Theme.bg), self.rect)
 
 
 class Tracker:
@@ -132,28 +139,35 @@ class Tracker:
             x: int, y: int,
             color: list = Theme.themes["green"],
             show_name: bool = False,
+            show_year: bool = False,
     ):
         self.name = name
         self.x = x
         self.y = y
         self.rect = pg.Rect(self.x, self.y, TRACKER_WIDTH, TRACKER_HEIGHT)
-        self.dots = []
+        self.dots = [[], [], [], [], [], [], []]
         self.color = color
-        for y_rel in range(self.rect.height//(DOT_SIZE+DOT_PADY)):
-            self.dots.append([])
-            for x_rel in range(self.rect.width//(DOT_SIZE+DOT_PADX)):
+        year = 2026  # TODO: CALCULATE YEAR
+        y_offset = get_calendar_date(year, 1).weekday()
+        day_count = 1
+        for x_rel in range(52+1):
+            for y_rel in range(7):
                 # x and y are relative to box in pixels
-                x = x_rel * (DOT_SIZE + DOT_PADX)
-                y = y_rel * (DOT_SIZE + DOT_PADY)
-                year = 2026  # TODO: CALCULATE YEAR
-                date = get_calendar_date(year, x, y)
-                self.dots[y_rel].append(Dot(x, y, self.color, (random.randint(0, 5) if x_rel < 53 else 6)))
+                date = get_calendar_date(year, day_count)
+                if date == -1: continue
+                if y_rel < y_offset and x_rel == 0: continue
+                day_count += 1
+                x = 1 + x_rel * (DOT_SIZE + DOT_PADX)
+                y = 1 + y_rel * (DOT_SIZE + DOT_PADY)
+                count = sql_get_day_count(self.name, date)[0][0]
+                self.dots[y_rel].append(Dot(x, y, self.color, count, date))
 
     def draw(self):
         pg.draw.rect(DIS, Theme.Tracker.border_color, self.rect, 2, 10)
-        for y in range(len(self.dots)-1):
-            for x in range(len(self.dots[y])-1):
+        for y in range(len(self.dots)):
+            for x in range(len(self.dots[y])):
                 self.dots[y][x].draw(self.rect)
+
 
 
 @sql_query
@@ -170,6 +184,10 @@ def sql_get_tracker_data(curs, tracker_name):
 
 @sql_query
 def sql_get_day_count(curs, tracker_name, date):
+    """
+    Takes in tracker_name, date;
+    Returns ((count,),)
+    """
     return curs.execute("""
         SELECT COUNT(C.id)
         FROM Contribution AS C
@@ -188,14 +206,33 @@ def sql_get_trackers(curs) -> list[str]:
     """)
 
 
-def get_calendar_date(year, x, y):
-    day = 0
-    month = 0
-    return f"{year}-{month}-{day}"
+def get_calendar_date(year, day):
+    """
+    Gets the calendar date in form 'YYYY-MM-DD' given
+    the day of the year (1-365[+1])
+    """
+    try:
+        return dt.datetime.strptime(f"{year}-{day}", "%Y-%j").date()
+    except:
+        return -1
+
+
+def handle_event(event):
+    global trackers
+    if event.type == pg.MOUSEBUTTONUP:
+        if event.button == pg.BUTTON_LEFT:
+            mouse_pos = pg.mouse.get_pos()
+            mouse_rect = pg.Rect(mouse_pos[0], mouse_pos[1], 1, 1)
+            for tracker in trackers:
+                if mouse_rect.colliderect(tracker.rect):
+                    for y in tracker.dots:
+                        for dot in y:
+                            if mouse_rect.colliderect(dot.rect):
+                                dot.draw_info(tracker.name)
 
 
 def main():
-
+    global trackers
     trackers = [
     ]
     x, y = 20, 20
@@ -207,6 +244,10 @@ def main():
         ))
         y += 130
     while True:
+        DIS.fill(Theme.bg)
+        for tracker in trackers:
+            tracker.draw()
+
         for event in pg.event.get():
             if event.type == pg.QUIT:
                 pg.quit()
@@ -215,12 +256,11 @@ def main():
                 if event.key == pg.K_ESCAPE:
                     pg.quit()
                     quit()
-
-        DIS.fill(Theme.bg)
-        for tracker in trackers:
-            tracker.draw()
+            else:
+                handle_event(event)
 
         WIN.flip()
         clock.tick(TICK)
+
 
 main()
