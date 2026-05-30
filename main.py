@@ -107,13 +107,21 @@ class Theme:
 
 
 class Dot:
-    def __init__(self, x, y, color, count, date: dt.date = "2000-1-1",):
+    def __init__(self, x, y, color, count, date: dt.date = None,):
         self.x = x
         self.y = y
         self.color = color
         self.count = count
         self.rect = pg.Rect(self.x, self.y, DOT_SIZE, DOT_SIZE)
-        self.date = date
+        self.date = date if date is not None else dt.datetime.today().date()
+        self.draw_info_timer = 0
+
+    def update(self):
+        if self.draw_info_timer:
+            self.draw_info(self.tracker, True)
+            self.draw_info_timer -= 1
+        if self.draw_info_timer == 1:
+            return True  # signal update
 
     def draw(self, parent_rect):
         parentx = parent_rect[0]
@@ -124,12 +132,15 @@ class Dot:
             DOT_SIZE,
             DOT_SIZE
         )
-        lvl = self.count  # TODO: Normalise count between 0 and 4
+        lvl = self.count  # TODO: Normalise lvl between 0 and 4
         pg.draw.rect(DIS, self.color[lvl], rect, border_radius=DOT_BRAD)
 
-    def draw_info(self, tracker):
+    def draw_info(self, tracker, internal=False):
+        self.tracker = tracker
         txt = str(self.date) + " " + str(sql_get_day_count(tracker, self.date)[0][0])
-        DIS.blit(FONT.render(txt, False, Theme.fg, Theme.bg), self.rect)
+        DIS.blit(FONT.render(txt, False, Theme.fg, Theme.bg), (self.rect[0], self.rect[1]))
+        if not internal:
+            self.draw_info_timer = 300
 
 
 class Tracker:
@@ -219,6 +230,7 @@ def get_calendar_date(year, day):
 
 def handle_event(event):
     global trackers
+    update = False
     if event.type == pg.MOUSEBUTTONUP:
         if event.button == pg.BUTTON_LEFT:
             mouse_pos = pg.mouse.get_pos()
@@ -229,6 +241,8 @@ def handle_event(event):
                         for dot in y:
                             if mouse_rect.colliderect(dot.rect):
                                 dot.draw_info(tracker.name)
+                                update = True
+    return update
 
 
 def main():
@@ -243,10 +257,14 @@ def main():
             Theme.themes[t[2]],
         ))
         y += 130
+    update = True
     while True:
         DIS.fill(Theme.bg)
         for tracker in trackers:
-            tracker.draw()
+            for y in tracker.dots:
+                for dot in y:
+                    update = dot.update() or update
+            update = tracker.draw() or update
 
         for event in pg.event.get():
             if event.type == pg.QUIT:
@@ -257,10 +275,12 @@ def main():
                     pg.quit()
                     quit()
             else:
-                handle_event(event)
+                update = handle_event(event) or update
 
-        WIN.flip()
+        if update:
+            WIN.flip()
         clock.tick(TICK)
+        update = False
 
 
 main()
