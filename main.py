@@ -10,6 +10,7 @@ DIS = WIN.get_surface()
 clock = pg.time.Clock()
 TICK = 30
 FONT = pg.font.SysFont("", 12)
+TITLE_FONT = pg.font.SysFont("", 20)
 
 TRACKER_DB = "./TrackerCalendar.db"
 
@@ -32,7 +33,6 @@ def sql_query(func):
             res = func(curs, *args, **kwargs)
             data = res.fetchall()
         return data
-
     return wrapper
 
 
@@ -121,7 +121,7 @@ class Dot:
             self.draw_info(self.tracker, True)
             self.draw_info_timer -= 1
         if self.draw_info_timer == 1:
-            return True  # signal update
+            return True  # Signal update
 
     def draw(self, parent_rect):
         parentx = parent_rect[0]
@@ -132,7 +132,7 @@ class Dot:
             DOT_SIZE,
             DOT_SIZE
         )
-        lvl = self.count  # TODO: Normalise lvl between 0 and 4
+        lvl = self.count  # TODO: Normalise lvl to integer between 0 and 4
         pg.draw.rect(DIS, self.color[lvl], rect, border_radius=DOT_BRAD)
 
     def draw_info(self, tracker, internal=False):
@@ -140,7 +140,7 @@ class Dot:
         txt = str(self.date) + " " + str(sql_get_day_count(tracker, self.date)[0][0])
         DIS.blit(FONT.render(txt, False, Theme.fg, Theme.bg), (self.rect[0], self.rect[1]))
         if not internal:
-            self.draw_info_timer = 300
+            self.draw_info_timer = 150
 
 
 class Tracker:
@@ -158,7 +158,10 @@ class Tracker:
         self.rect = pg.Rect(self.x, self.y, TRACKER_WIDTH, TRACKER_HEIGHT)
         self.dots = [[], [], [], [], [], [], []]
         self.color = color
+        self.show_name = show_name
+        self.show_year = show_year
         year = 2026  # TODO: CALCULATE YEAR
+        self.year = year
         y_offset = get_calendar_date(year, 1).weekday()
         day_count = 1
         for x_rel in range(52+1):
@@ -178,6 +181,9 @@ class Tracker:
         for y in range(len(self.dots)):
             for x in range(len(self.dots[y])):
                 self.dots[y][x].draw(self.rect)
+        if self.show_name:
+            txt = " " + str(self.name) + " "
+            DIS.blit(TITLE_FONT.render(txt, True, Theme.Tracker.border_color, Theme.bg), (self.x + 2*DOT_SIZE, self.y-DOT_SIZE//2))
 
 
 
@@ -255,6 +261,7 @@ def main():
             t[1],
             x, y,
             Theme.themes[t[2]],
+            show_name = True,
         ))
         y += 130
     update = True
