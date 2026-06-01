@@ -184,6 +184,12 @@ class Tracker:
         if self.show_name:
             txt = " " + str(self.name) + " "
             DIS.blit(TITLE_FONT.render(txt, True, Theme.Tracker.border_color, Theme.bg), (self.x + 2*DOT_SIZE, self.y-DOT_SIZE//2))
+        if self.show_year:
+            txt = list((i for i in str(self.year)))
+            for i in range(len(txt)):
+                DIS.blit(TITLE_FONT.render(" ", False, Theme.Tracker.border_color, Theme.bg), (self.x, self.y + i*1.5*DOT_SIZE + 2*DOT_SIZE))
+            for i in range(len(txt)):
+                DIS.blit(TITLE_FONT.render(txt[i], True, Theme.Tracker.border_color, Theme.bg), (self.x-DOT_SIZE//3, self.y + i*1.5*DOT_SIZE+DOT_SIZE*2.5))
 
 
 
@@ -261,7 +267,8 @@ def main():
             t[1],
             x, y,
             Theme.themes[t[2]],
-            show_name = True,
+            show_name=True,
+            show_year=True,
         ))
         y += 130
     update = True
